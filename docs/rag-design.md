@@ -35,12 +35,12 @@ future source/type/asset filters.
 
 ## Embeddings, vector index, and hybrid search
 
-The retrieval layer uses LangChain's FAISS vector store. To keep this
-submission offline and inexpensive, `LocalHashEmbeddings` creates deterministic
-normalized token vectors locally; it is a retrieval method, not a hosted
-semantic model. A production deployment can replace it with
-`OpenAIEmbeddings` or a local sentence-transformer without changing the
-index interface.
+The retrieval layer uses LangChain's FAISS vector store with OpenAI's
+`text-embedding-3-small` through `OpenAIEmbeddings`. The embedding client is
+cached once per process and the model can be changed with
+`RAG_EMBEDDING_MODEL` without changing the index interface. Document and query
+text are sent to the configured OpenAI API for embedding, so deployment must
+approve that data flow.
 
 Retrieval is hybrid: FAISS returns vector candidates, then lexical term
 overlap is combined with the normalized vector score. Results are sorted by

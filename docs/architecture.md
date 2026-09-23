@@ -13,7 +13,12 @@ Streamlit UI
     -> grounded answer + document citations + tool messages
 ```
 
-The LLM chooses the next typed tool. Every tool implementation calls the MCP client. The MCP server is the only component allowed to call the Alarm API. RAG evidence is added to the graph state before final synthesis.
+The LLM chooses the next typed tool. At investigation startup, the gateway
+discovers MCP tools and generates the LangGraph adapters from their schemas;
+there are no duplicated operational tool declarations in the orchestrator.
+Every generated adapter calls the MCP client. The MCP server is the only
+component allowed to call the Alarm API. RAG evidence is added to the graph
+state before final synthesis.
 
 The gateway performs `tools/list` before every invocation, validates that the
 requested tool exists, passes the investigation correlation ID to MCP, and

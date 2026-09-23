@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import math
+import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
-from langchain_core.embeddings import Embeddings
+from langchain_openai import OpenAIEmbeddings
 
 from rag.ingestion.ingest import ingest
 
@@ -14,32 +14,24 @@ ROOT = Path(__file__).parents[1] / "documents"
 STOP_WORDS = {"procedure", "procedures", "maintenance", "guide", "guidance", "instruction"}
 
 
-class LocalHashEmbeddings(Embeddings):
-    """Dependency-light deterministic embeddings for the local demo corpus."""
-
-    dimensions = 256
-
-    def _embed(self, text: str) -> list[float]:
-        vector = [0.0] * self.dimensions
-        for token in re.findall(r"[a-z0-9]+", text.lower()):
-            position = int(hashlib.sha256(token.encode()).hexdigest(), 16) % self.dimensions
-            vector[position] += 1.0
-        norm = math.sqrt(sum(value * value for value in vector)) or 1.0
-        return [value / norm for value in vector]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._embed(text) for text in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._embed(text)
+@lru_cache(maxsize=1)
+def _embeddings() -> OpenAIEmbeddings:
+    """Create the configured OpenAI embedding client once per process."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "replace-me":
+        raise RuntimeError("Set OPENAI_API_KEY before using document retrieval.")
+    return OpenAIEmbeddings(
+        model=os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+        api_key=api_key,
+    )
 
 
 def retrieve(query: str, top_k: int = 3) -> list[dict]:
-    """Run hybrid lexical/vector retrieval and return citation-ready snippets."""
+    """Run OpenAI semantic retrieval plus lexical reranking."""
     documents = ingest(str(ROOT))
     if not documents:
         return []
-    index = FAISS.from_documents(documents, LocalHashEmbeddings())
+    index = FAISS.from_documents(documents, _embeddings())
     vector_hits = index.similarity_search_with_score(
         query, k=min(len(documents), max(top_k * 3, 5))
     )
