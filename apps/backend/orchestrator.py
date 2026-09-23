@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from uuid import uuid4
 from pathlib import Path
 from typing import Annotated, TypedDict
 
@@ -29,6 +30,10 @@ class State(TypedDict):
 class McpGateway:
     """Small MCP client used by every LLM tool."""
 
+    def __init__(self) -> None:
+        self.trace: list[dict] = []
+        self.trace_id = ""
+
     def _server_parameters(self) -> StdioServerParameters:
         """Build the configured stdio parameters for the MCP server."""
         return StdioServerParameters(
@@ -42,15 +47,22 @@ class McpGateway:
 
     async def call(self, name: str, arguments: dict) -> dict:
         """Discover tools, invoke one tool, and return its JSON payload."""
+        trace_id = arguments.setdefault("trace_id", self.trace_id or str(uuid4()))
+        self.trace.append({"event": "discover", "tool": name, "trace_id": trace_id})
         async with stdio_client(self._server_parameters()) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 available = await session.list_tools()
                 if name not in {item.name for item in available.tools}:
                     raise RuntimeError(f"MCP tool unavailable: {name}")
+                self.trace.append({"event": "invoke", "tool": name, "trace_id": trace_id})
                 result = await session.call_tool(name, arguments)
+                if getattr(result, "isError", False):
+                    raise RuntimeError(f"MCP tool failed: {name}")
                 text = next((item.text for item in result.content if hasattr(item, "text")), "{}")
-                return json.loads(text)
+                payload = json.loads(text)
+                self.trace.append({"event": "complete", "tool": name, "trace_id": trace_id})
+                return payload
 
 
 gateway = McpGateway()
@@ -128,6 +140,8 @@ def build_graph():
 async def investigate(question: str) -> dict:
     """Run MCP tool-calling, retrieve RAG evidence, and synthesize an answer."""
     docs = retrieve(question)
+    gateway.trace = []
+    gateway.trace_id = str(uuid4())
     graph = build_graph()
     result = await graph.ainvoke({
         "messages": [HumanMessage(content=f"Question: {question}\nDocument evidence: {json.dumps(docs)}")],
@@ -136,6 +150,8 @@ async def investigate(question: str) -> dict:
         "answer": result["messages"][-1].content,
         "sources": docs,
         "messages": result["messages"],
+        "trace": gateway.trace,
+        "trace_id": gateway.trace_id,
     }
 
 

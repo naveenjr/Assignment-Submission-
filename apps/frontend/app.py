@@ -22,6 +22,9 @@ if st.button("Investigate", type="primary"):
             st.markdown(result["answer"])
             st.subheader("Document sources")
             st.json(result["sources"])
+            st.subheader("MCP execution trace")
+            st.caption(f"Correlation ID: {result['trace_id']}")
+            st.json(result["trace"])
             with st.expander("Message and tool trace"):
                 st.json([
                     message.model_dump() if hasattr(message, "model_dump") else str(message)

@@ -15,6 +15,12 @@ Streamlit UI
 
 The LLM chooses the next typed tool. Every tool implementation calls the MCP client. The MCP server is the only component allowed to call the Alarm API. RAG evidence is added to the graph state before final synthesis.
 
+The gateway performs `tools/list` before every invocation, validates that the
+requested tool exists, passes the investigation correlation ID to MCP, and
+records discovery/invocation/completion events for the Streamlit trace. The
+LLM can chain the result of asset search into alarm retrieval and then into
+summary, correlation, or recommendations.
+
 ## Boundary rule
 
 - **MCP owns operations:** asset lookup, alarm retrieval, summaries, correlation, and recommendations are all MCP tools. The LLM never calls the Alarm API or connector directly.

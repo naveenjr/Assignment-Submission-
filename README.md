@@ -108,9 +108,12 @@ Try these in the Streamlit UI:
 
 The LLM receives typed LangChain tools. When it calls a tool, the tool opens an MCP client session, discovers the MCP server tools, invokes the requested MCP tool, and returns the result to the LangGraph message state. The MCP server then calls the Alarm API. The LLM receives RAG snippets and MCP results before writing the grounded answer.
 
-## Clean responsibility boundaries
 
-- RAG answers questions from procedure documents only; it has no operational side effects.
-- MCP performs every alarm or asset operation.
-- The LLM is an orchestrator and answer generator, not a source-system client.
-- The small LangChain functions are adapters for LangGraph and contain no business logic.
+## Future observability
+
+Langfuse is intentionally not part of the current runtime dependencies. A
+future local Docker Compose setup can run Langfuse at `http://localhost:3000`
+and instrument the LangGraph invocation, MCP spans, and RAG retrieval with the
+same correlation ID already shown in the UI. This keeps observability
+optional and avoids adding another service or credential requirement to the
+Version 1 submission.

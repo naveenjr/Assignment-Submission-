@@ -1,7 +1,7 @@
 [project]
 name = "alarm-investigation-copilot"
 version = "0.1.0"
-description = "Minimal alarm investigation copilot using LangGraph, MCP, Streamlit, and local RAG."
+description = "Alarm investigation agent using LangGraph, MCP, Streamlit, and local RAG."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -11,6 +11,9 @@ dependencies = [
     "langgraph>=0.6,<1",
     "langchain-core>=0.3,<1",
     "langchain-openai>=0.3,<1",
+    "langchain-community>=0.3,<1",
+    "langchain-text-splitters>=0.3,<1",
+    "faiss-cpu>=1.8,<2",
     "streamlit>=1.45,<2",
     "httpx>=0.28,<1",
     "python-dotenv>=1.0,<2",

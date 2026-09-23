@@ -73,10 +73,15 @@ class AlarmApiClient:
         self.base_url = os.getenv("ALARM_API_BASE_URL", "http://localhost:8000").rstrip("/")
         self.token = os.getenv("ALARM_API_TOKEN", "demo-token")
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict:
+    def get(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        trace_id: str = "mcp-investigation",
+    ) -> dict:
         """Call the alarm API with authentication, timeout, and bounded retry."""
         auth_header = "Bearer " + self.token
-        headers = {"authorization": auth_header, "x-trace-id": "mcp-investigation"}
+        headers = {"authorization": auth_header, "x-trace-id": trace_id}
         last_error: Exception | None = None
         for _ in range(2):
             try:
@@ -90,4 +95,4 @@ class AlarmApiClient:
                 return response.json()
             except (httpx.HTTPError, ValueError) as exc:
                 last_error = exc
-        raise RuntimeError(f"Alarm API request failed: {last_error}") from last_error
+        raise RuntimeError(f"Alarm API request failed for {path}: {last_error}") from last_error
