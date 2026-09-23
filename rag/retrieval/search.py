@@ -26,14 +26,20 @@ def _embeddings() -> OpenAIEmbeddings:
     )
 
 
+@lru_cache(maxsize=1)
+def _index() -> FAISS | None:
+    """Build the document index once per process instead of per question."""
+    documents = ingest(str(ROOT))
+    return FAISS.from_documents(documents, _embeddings()) if documents else None
+
+
 def retrieve(query: str, top_k: int = 3) -> list[dict]:
     """Run OpenAI semantic retrieval plus lexical reranking."""
-    documents = ingest(str(ROOT))
-    if not documents:
+    index = _index()
+    if index is None:
         return []
-    index = FAISS.from_documents(documents, _embeddings())
     vector_hits = index.similarity_search_with_score(
-        query, k=min(len(documents), max(top_k * 3, 5))
+        query, k=min(len(index.index_to_docstore_id), max(top_k * 3, 5))
     )
     terms = {
         term

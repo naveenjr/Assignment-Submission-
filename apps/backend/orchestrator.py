@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import AsyncExitStack
 import json
 import os
 import sys
@@ -34,6 +35,9 @@ class McpGateway:
     def __init__(self) -> None:
         self.trace: list[dict] = []
         self.trace_id = ""
+        self._stack: AsyncExitStack | None = None
+        self._session: ClientSession | None = None
+        self._available_tools: set[str] = set()
 
     def _server_parameters(self) -> StdioServerParameters:
         """Build the configured stdio parameters for the MCP server."""
@@ -46,34 +50,49 @@ class McpGateway:
             env=dict(os.environ),
         )
 
+    async def start(self) -> list[Any]:
+        """Start one MCP session and discover tools for the current request."""
+        if self._session is not None:
+            available = await self._session.list_tools()
+            return list(available.tools)
+        self._stack = AsyncExitStack()
+        read, write = await self._stack.enter_async_context(
+            stdio_client(self._server_parameters())
+        )
+        self._session = await self._stack.enter_async_context(ClientSession(read, write))
+        await self._session.initialize()
+        available = await self._session.list_tools()
+        self._available_tools = {item.name for item in available.tools}
+        return list(available.tools)
+
+    async def close(self) -> None:
+        """Close the request-scoped MCP subprocess and session."""
+        if self._stack is not None:
+            await self._stack.aclose()
+        self._stack = None
+        self._session = None
+        self._available_tools = set()
+
     async def call(self, name: str, arguments: dict) -> dict:
-        """Discover tools, invoke one tool, and return its JSON payload."""
+        """Invoke a discovered MCP tool using the current request session."""
         trace_id = arguments.setdefault("trace_id", self.trace_id or str(uuid4()))
+        if self._session is None:
+            await self.start()
         self.trace.append({"event": "discover", "tool": name, "trace_id": trace_id})
-        async with stdio_client(self._server_parameters()) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                available = await session.list_tools()
-                if name not in {item.name for item in available.tools}:
-                    raise RuntimeError(f"MCP tool unavailable: {name}")
-                self.trace.append({"event": "invoke", "tool": name, "trace_id": trace_id})
-                result = await session.call_tool(name, arguments)
-                if getattr(result, "isError", False):
-                    raise RuntimeError(f"MCP tool failed: {name}")
-                text = next((item.text for item in result.content if hasattr(item, "text")), "{}")
-                payload = json.loads(text)
-                self.trace.append({"event": "complete", "tool": name, "trace_id": trace_id})
-                return payload
+        if name not in self._available_tools:
+            raise RuntimeError(f"MCP tool unavailable: {name}")
+        self.trace.append({"event": "invoke", "tool": name, "trace_id": trace_id})
+        result = await self._session.call_tool(name, arguments)
+        if getattr(result, "isError", False):
+            raise RuntimeError(f"MCP tool failed: {name}")
+        text = next((item.text for item in result.content if hasattr(item, "text")), "{}")
+        payload = json.loads(text)
+        self.trace.append({"event": "complete", "tool": name, "trace_id": trace_id})
+        return payload
 
     async def discover_tools(self) -> list[Any]:
         """Return the MCP tool definitions used to build LLM adapters."""
-        async with stdio_client(self._server_parameters()) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                return list((await session.list_tools()).tools)
-
-
-gateway = McpGateway()
+        return await self.start()
 
 
 def _json_type_to_python(schema: dict) -> type:
@@ -103,8 +122,11 @@ def _args_model(tool_definition: Any) -> type:
     return create_model(f"{tool_definition.name.title().replace('_', '')}Args", **fields)
 
 
-def _tools_from_mcp(tool_definitions: list[Any]) -> list[StructuredTool]:
+def _tools_from_mcp(
+    tool_definitions: list[Any], gateway: McpGateway | None = None
+) -> list[StructuredTool]:
     """Build LangChain adapters directly from MCP-discovered schemas."""
+    gateway = gateway or McpGateway()
     adapters = []
     for definition in tool_definitions:
         async def invoke(_name=definition.name, **arguments):
@@ -160,20 +182,23 @@ def build_graph(tools: list[StructuredTool]):
 async def investigate(question: str) -> dict:
     """Run MCP tool-calling, retrieve RAG evidence, and synthesize an answer."""
     docs = retrieve(question)
-    gateway.trace = []
+    gateway = McpGateway()
     gateway.trace_id = str(uuid4())
-    tools = _tools_from_mcp(await gateway.discover_tools())
-    graph = build_graph(tools)
-    result = await graph.ainvoke({
-        "messages": [HumanMessage(content=f"Question: {question}\nDocument evidence: {json.dumps(docs)}")],
-    })
-    return {
-        "answer": result["messages"][-1].content,
-        "sources": docs,
-        "messages": result["messages"],
-        "trace": gateway.trace,
-        "trace_id": gateway.trace_id,
-    }
+    try:
+        tools = _tools_from_mcp(await gateway.discover_tools(), gateway)
+        graph = build_graph(tools)
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content=f"Question: {question}\nDocument evidence: {json.dumps(docs)}")],
+        })
+        return {
+            "answer": result["messages"][-1].content,
+            "sources": docs,
+            "messages": result["messages"],
+            "trace": gateway.trace,
+            "trace_id": gateway.trace_id,
+        }
+    finally:
+        await gateway.close()
 
 
 def investigate_sync(question: str) -> dict:
