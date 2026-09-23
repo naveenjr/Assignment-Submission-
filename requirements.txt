@@ -1,0 +1,10 @@
+fastapi>=0.116,<1
+uvicorn>=0.35,<1
+mcp>=1.30,<2
+langgraph>=0.6,<1
+langchain-core>=0.3,<1
+langchain-openai>=0.3,<1
+streamlit>=1.45,<2
+httpx>=0.28,<1
+python-dotenv>=1.0,<2
+pytest>=8,<9
