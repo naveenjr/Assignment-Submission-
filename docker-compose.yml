@@ -1,0 +1,11 @@
+services:
+  alarm-copilot:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      ALARM_API_BASE_URL: http://localhost:8000
+      ALARM_API_TOKEN: ${ALARM_API_TOKEN:-demo-token}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-replace-me}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
