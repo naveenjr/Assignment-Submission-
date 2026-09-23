@@ -7,7 +7,8 @@ uv run python mcp-servers/alarm-management/server.py
 ```
 
 The client first calls MCP `tools/list`, checks that the requested tool is
-available, and then invokes it with schema-aware arguments. Pydantic models
+available, and generates the LLM-facing LangChain adapters from the discovered
+schemas. It then invokes the selected tool with schema-aware arguments. Pydantic models
 validate inputs and outputs. Each invocation carries a correlation `trace_id`
 to the source API as `x-trace-id`. The bearer token is read from
 `ALARM_API_TOKEN` and is never returned or logged.

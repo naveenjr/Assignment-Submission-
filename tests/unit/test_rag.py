@@ -1,9 +1,24 @@
-from rag.retrieval.search import retrieve
+from langchain_core.embeddings import Embeddings
+
+from rag.retrieval import search
 from rag.ingestion.ingest import ingest
 
 
+class TestEmbeddings(Embeddings):
+    def embed_documents(self, texts):
+        return [[float(len(text)), 0.0] for text in texts]
+
+    def embed_query(self, text):
+        return [float(len(text)), 0.0]
+
+
+def setup_module():
+    search._embeddings.cache_clear()
+    search._embeddings = lambda: TestEmbeddings()
+
+
 def test_retrieval_returns_procedure_source():
-    results = retrieve("Boiler Feed Pump 102 discharge pressure")
+    results = search.retrieve("Boiler Feed Pump 102 discharge pressure")
     assert results
     assert results[0]["source"] == "boiler-feed-pump-102.md"
     assert results[0]["section"]
@@ -11,7 +26,7 @@ def test_retrieval_returns_procedure_source():
 
 
 def test_retrieval_returns_empty_for_unknown_topic():
-    assert retrieve("quantum telescope maintenance procedure") == []
+    assert search.retrieve("quantum telescope maintenance procedure") == []
 
 
 def test_ingestion_creates_multiple_metadata_rich_chunks():

@@ -49,11 +49,15 @@ OPENAI_API_KEY=your-new-openai-api-key
 LLM_MODEL=gpt-4o-mini
 ALARM_API_BASE_URL=http://127.0.0.1:8000
 ALARM_API_TOKEN=demo-token
+RAG_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 The application loads `.env` automatically through `python-dotenv`. `.env.example`
 is only a template and must not contain a real secret. The `.env` file is ignored
-by Git.
+by Git. RAG uses OpenAI embeddings, so the first retrieval request sends the
+document chunks and query to OpenAI and requires a valid `OPENAI_API_KEY`.
+Change `RAG_EMBEDDING_MODEL` only to another embedding model available to the
+configured OpenAI account.
 
 Use `uv run` for all project commands. It automatically uses the `.venv` created by `uv sync`:
 
